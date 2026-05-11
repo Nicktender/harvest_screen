@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Broadcast Control Panel</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #111;
+        color: #eee;
+        padding: 30px;
+        max-width: 800px;
+        margin: auto;
+    }
+
+    h1 {
+        margin-bottom: 20px;
+    }
+
+    .section {
+        background: #1b1b1b;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+
+    label {
+        display: block;
+        margin-top: 15px;
+        margin-bottom: 5px;
+    }
+
+    input {
+        width: 100%;
+        padding: 10px;
+        border-radius: 6px;
+        border: none;
+        background: #2a2a2a;
+        color: white;
+    }
+
+    button {
+        margin-top: 20px;
+        padding: 12px 18px;
+        border: none;
+        border-radius: 6px;
+        background: #4c8bf5;
+        color: white;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    button:hover {
+        background: #3a76da;
+    }
+
+    textarea {
+        width: 100%;
+        height: 300px;
+        margin-top: 20px;
+        background: #0d0d0d;
+        color: #00ff88;
+        padding: 15px;
+        border-radius: 8px;
+        border: none;
+        resize: vertical;
+        font-family: monospace;
+        font-size: 14px;
+    }
+
+    .danger {
+        background: #c0392b;
+    }
+
+    .danger:hover {
+        background: #a93226;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>Broadcast Control Panel</h1>
+
+<div class="section">
+
+    <label>Broadcast Title</label>
+    <input type="text" id="title" placeholder="Emergency Broadcast">
+
+    <label>Video URL</label>
+    <input type="text" id="videoUrl" placeholder="https://yourcdn.com/videos/news.mp4">
+
+    <label>Start Date & Time (LOCAL TIME)</label>
+    <input type="datetime-local" id="startTime">
+
+    <label>End Date & Time (LOCAL TIME)</label>
+    <input type="datetime-local" id="endTime">
+
+    <button onclick="generateBroadcast()">
+        Generate video_package.json
+    </button>
+
+    <button class="danger" onclick="stopBroadcast()">
+        Stop Broadcast
+    </button>
+
+</div>
+
+<textarea id="output" readonly></textarea>
+
+<script>
+
+function generateBroadcast() {
+
+    const title = document.getElementById("title").value.trim();
+    const videoUrl = document.getElementById("videoUrl").value.trim();
+
+    const startLocal = document.getElementById("startTime").value;
+    const endLocal = document.getElementById("endTime").value;
+
+    if (!videoUrl || !startLocal || !endLocal) {
+        alert("Please fill all required fields.");
+        return;
+    }
+
+    // Convert LOCAL datetime into UTC ISO strings
+    const startUtc = new Date(startLocal).toISOString();
+    const endUtc = new Date(endLocal).toISOString();
+
+    const packageData = {
+        active: true,
+        title: title || "Untitled Broadcast",
+        video: videoUrl,
+        startTime: startUtc,
+        endTime: endUtc
+    };
+
+    document.getElementById("output").value =
+        JSON.stringify(packageData, null, 4);
+}
+
+function stopBroadcast() {
+
+    const packageData = {
+        active: false
+    };
+
+    document.getElementById("output").value =
+        JSON.stringify(packageData, null, 4);
+}
+
+</script>
+
+</body>
+</html>
