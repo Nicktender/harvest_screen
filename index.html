@@ -6,75 +6,85 @@
 
 <style>
     body {
-        font-family: Arial, sans-serif;
         background: #111;
         color: #eee;
-        padding: 30px;
-        max-width: 800px;
-        margin: auto;
+        font-family: Arial, sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 20px;
     }
 
     h1 {
-        margin-bottom: 20px;
+        margin-bottom: 25px;
     }
 
-    .section {
-        background: #1b1b1b;
-        padding: 20px;
-        border-radius: 10px;
-        margin-bottom: 20px;
+    .panel {
+        background: #1a1a1a;
+        padding: 25px;
+        border-radius: 12px;
     }
 
     label {
         display: block;
-        margin-top: 15px;
-        margin-bottom: 5px;
+        margin-top: 18px;
+        margin-bottom: 6px;
+        font-size: 14px;
     }
 
     input {
         width: 100%;
-        padding: 10px;
-        border-radius: 6px;
+        padding: 12px;
+        border-radius: 8px;
         border: none;
-        background: #2a2a2a;
+        background: #2b2b2b;
         color: white;
+        box-sizing: border-box;
     }
 
     button {
         margin-top: 20px;
-        padding: 12px 18px;
+        padding: 14px 18px;
         border: none;
-        border-radius: 6px;
-        background: #4c8bf5;
+        border-radius: 8px;
+        background: #4a84ff;
         color: white;
+        font-size: 15px;
         cursor: pointer;
-        font-size: 16px;
+        margin-right: 10px;
     }
 
     button:hover {
-        background: #3a76da;
+        background: #3769d6;
+    }
+
+    .danger {
+        background: #d14444;
+    }
+
+    .danger:hover {
+        background: #aa2e2e;
     }
 
     textarea {
         width: 100%;
-        height: 300px;
-        margin-top: 20px;
-        background: #0d0d0d;
-        color: #00ff88;
-        padding: 15px;
-        border-radius: 8px;
+        height: 350px;
+        margin-top: 25px;
+        background: #0c0c0c;
+        color: #00ff99;
         border: none;
+        border-radius: 10px;
+        padding: 15px;
+        box-sizing: border-box;
         resize: vertical;
         font-family: monospace;
         font-size: 14px;
     }
 
-    .danger {
-        background: #c0392b;
-    }
-
-    .danger:hover {
-        background: #a93226;
+    .info {
+        margin-top: 20px;
+        color: #aaa;
+        font-size: 14px;
+        line-height: 1.5;
     }
 </style>
 </head>
@@ -83,7 +93,7 @@
 
 <h1>Broadcast Control Panel</h1>
 
-<div class="section">
+<div class="panel">
 
     <label>Broadcast Title</label>
     <input type="text" id="title" placeholder="Emergency Broadcast">
@@ -91,49 +101,86 @@
     <label>Video URL</label>
     <input type="text" id="videoUrl" placeholder="https://yourcdn.com/videos/news.mp4">
 
-    <label>Start Date & Time (LOCAL TIME)</label>
+    <label>Start Date & Time (YOUR LOCAL TIME)</label>
     <input type="datetime-local" id="startTime">
 
-    <label>End Date & Time (LOCAL TIME)</label>
+    <label>End Date & Time (OPTIONAL)</label>
     <input type="datetime-local" id="endTime">
+
+    <label>If End Time Empty → Auto Duration (minutes)</label>
+    <input type="number" id="durationMinutes" value="5">
 
     <button onclick="generateBroadcast()">
         Generate video_package.json
     </button>
 
     <button class="danger" onclick="stopBroadcast()">
-        Stop Broadcast
+        Generate Stop Broadcast JSON
     </button>
 
-</div>
+    <textarea id="output" readonly></textarea>
 
-<textarea id="output" readonly></textarea>
+    <div class="info">
+        - Times entered are converted from your local timezone into UTC automatically.<br>
+        - If no end time is specified, the duration field is used.<br>
+        - Copy the generated JSON into video_package.json
+    </div>
+
+</div>
 
 <script>
 
 function generateBroadcast() {
 
-    const title = document.getElementById("title").value.trim();
-    const videoUrl = document.getElementById("videoUrl").value.trim();
+    const title =
+        document.getElementById("title").value.trim();
 
-    const startLocal = document.getElementById("startTime").value;
-    const endLocal = document.getElementById("endTime").value;
+    const videoUrl =
+        document.getElementById("videoUrl").value.trim();
 
-    if (!videoUrl || !startLocal || !endLocal) {
-        alert("Please fill all required fields.");
+    const startLocal =
+        document.getElementById("startTime").value;
+
+    let endLocal =
+        document.getElementById("endTime").value;
+
+    const durationMinutes =
+        parseInt(document.getElementById("durationMinutes").value);
+
+    if (!videoUrl || !startLocal) {
+        alert("Please provide at least a video URL and start time.");
         return;
     }
 
-    // Convert LOCAL datetime into UTC ISO strings
-    const startUtc = new Date(startLocal).toISOString();
-    const endUtc = new Date(endLocal).toISOString();
+    // Convert local start time into Date object
+    const startDate = new Date(startLocal);
+
+    let endDate;
+
+    // If no end time specified, auto-generate one
+    if (!endLocal) {
+
+        endDate = new Date(startDate.getTime());
+
+        endDate.setMinutes(
+            endDate.getMinutes() + durationMinutes
+        );
+
+    } else {
+
+        endDate = new Date(endLocal);
+    }
 
     const packageData = {
         active: true,
         title: title || "Untitled Broadcast",
         video: videoUrl,
-        startTime: startUtc,
-        endTime: endUtc
+
+        // UTC ISO timestamps
+        startTime: startDate.toISOString(),
+        endTime: endDate.toISOString(),
+
+        generatedAt: new Date().toISOString()
     };
 
     document.getElementById("output").value =
@@ -143,7 +190,8 @@ function generateBroadcast() {
 function stopBroadcast() {
 
     const packageData = {
-        active: false
+        active: false,
+        generatedAt: new Date().toISOString()
     };
 
     document.getElementById("output").value =
