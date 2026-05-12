@@ -14,10 +14,6 @@
         padding: 20px;
     }
 
-    h1 {
-        margin-bottom: 25px;
-    }
-
     .panel {
         background: #1a1a1a;
         padding: 25px;
@@ -61,10 +57,6 @@
         background: #d14444;
     }
 
-    .danger:hover {
-        background: #aa2e2e;
-    }
-
     textarea {
         width: 100%;
         height: 350px;
@@ -74,16 +66,13 @@
         border: none;
         border-radius: 10px;
         padding: 15px;
-        box-sizing: border-box;
-        resize: vertical;
         font-family: monospace;
-        font-size: 14px;
     }
 
     .info {
         margin-top: 20px;
         color: #aaa;
-        font-size: 14px;
+        font-size: 13px;
         line-height: 1.5;
     }
 </style>
@@ -96,34 +85,32 @@
 <div class="panel">
 
     <label>Broadcast Title</label>
-    <input type="text" id="title" placeholder="Emergency Broadcast">
+    <input type="text" id="title">
 
     <label>Video URL</label>
-    <input type="text" id="videoUrl" placeholder="https://yourcdn.com/videos/news.mp4">
+    <input type="text" id="videoUrl" placeholder="https://example.com/video.mp4">
 
-    <label>Start Date & Time (YOUR LOCAL TIME)</label>
+    <label>OR Upload Video File (fallback for file://)</label>
+    <input type="file" id="videoFile" accept="video/*">
+
+    <label>Start Date & Time</label>
     <input type="datetime-local" id="startTime">
 
-    <label>End Date & Time (OPTIONAL)</label>
+    <label>End Date & Time (optional)</label>
     <input type="datetime-local" id="endTime">
 
-    <label>If End Time Empty → Auto Duration (minutes)</label>
+    <label>Fallback Duration (minutes if detection fails)</label>
     <input type="number" id="durationMinutes" value="5">
 
-    <button onclick="generateBroadcast()">
-        Generate video_package.json
-    </button>
-
-    <button class="danger" onclick="stopBroadcast()">
-        Generate Stop Broadcast JSON
-    </button>
+    <button onclick="generateBroadcast()">Generate JSON</button>
+    <button class="danger" onclick="stopBroadcast()">Stop Broadcast</button>
 
     <textarea id="output" readonly></textarea>
 
     <div class="info">
-        - Times entered are converted from your local timezone into UTC automatically.<br>
-        - If no end time is specified, the duration field is used.<br>
-        - Copy the generated JSON into video_package.json
+        ✔ Video duration is auto-detected when possible<br>
+        ✔ File upload works when URL/CORS fails<br>
+        ✔ Times are converted to UTC automatically
     </div>
 
 </div>
@@ -134,63 +121,90 @@ function getVideoDuration(url) {
     return new Promise((resolve, reject) => {
 
         const video = document.createElement("video");
+        video.preload = "metadata";
+        video.src = url;
+
+        video.onloadedmetadata = () => {
+            URL.revokeObjectURL(video.src);
+
+            if (!isFinite(video.duration) || video.duration <= 0) {
+                reject("Invalid duration");
+            } else {
+                resolve(video.duration);
+            }
+        };
+
+        video.onerror = () => reject("Video load failed");
+    });
+}
+
+function getFileDuration(file) {
+    return new Promise((resolve, reject) => {
+
+        const video = document.createElement("video");
+        const url = URL.createObjectURL(file);
 
         video.preload = "metadata";
         video.src = url;
 
         video.onloadedmetadata = () => {
-            window.URL.revokeObjectURL(video.src);
+            URL.revokeObjectURL(url);
 
-            if (video.duration === Infinity || isNaN(video.duration)) {
-                reject("Invalid duration");
+            if (!isFinite(video.duration) || video.duration <= 0) {
+                reject("Invalid file duration");
             } else {
-                resolve(video.duration); // seconds
+                resolve(video.duration);
             }
         };
 
-        video.onerror = () => {
-            reject("Failed to load video metadata");
-        };
+        video.onerror = () => reject("File video load failed");
     });
 }
 
 async function generateBroadcast() {
 
-    const title =
-        document.getElementById("title").value.trim();
+    const title = document.getElementById("title").value.trim();
+    const videoUrl = document.getElementById("videoUrl").value.trim();
+    const file = document.getElementById("videoFile").files[0];
 
-    const videoUrl =
-        document.getElementById("videoUrl").value.trim();
+    const startLocal = document.getElementById("startTime").value;
+    const endLocal = document.getElementById("endTime").value;
 
-    const startLocal =
-        document.getElementById("startTime").value;
+    const fallbackMinutes =
+        parseInt(document.getElementById("durationMinutes").value) || 5;
 
-    let endLocal =
-        document.getElementById("endTime").value;
-
-    const durationMinutesInput =
-        parseInt(document.getElementById("durationMinutes").value);
-
-    if (!videoUrl || !startLocal) {
-        alert("Please provide at least a video URL and start time.");
-        return;
-    }
-
-    const startDate = new Date(startLocal);
-    let endDate;
+    const output = document.getElementById("output");
 
     try {
 
-        // If no end time → fetch real video duration
+        if (!startLocal) {
+            throw new Error("Start time required");
+        }
+
+        const startDate = new Date(startLocal);
+
+        if (isNaN(startDate.getTime())) {
+            throw new Error("Invalid start time");
+        }
+
+        let endDate;
+
         if (!endLocal) {
 
-            let durationSeconds;
+            let durationSeconds = 0;
 
             try {
-                durationSeconds = await getVideoDuration(videoUrl);
+                if (file) {
+                    durationSeconds = await getFileDuration(file);
+                } else if (videoUrl) {
+                    durationSeconds = await getVideoDuration(videoUrl);
+                } else {
+                    throw new Error("No video source provided");
+                }
+
             } catch (e) {
-                console.warn("Could not fetch video duration, fallback to input:", e);
-                durationSeconds = durationMinutesInput * 60;
+                console.warn("Duration fetch failed:", e);
+                durationSeconds = fallbackMinutes * 60;
             }
 
             endDate = new Date(startDate.getTime() + durationSeconds * 1000);
@@ -199,36 +213,35 @@ async function generateBroadcast() {
             endDate = new Date(endLocal);
         }
 
+        if (isNaN(endDate.getTime())) {
+            throw new Error("Invalid end time computed");
+        }
+
         const packageData = {
             active: true,
             title: title || "Untitled Broadcast",
-            video: videoUrl,
-
+            video: videoUrl || (file ? file.name : null),
             startTime: startDate.toISOString(),
             endTime: endDate.toISOString(),
-
             generatedAt: new Date().toISOString()
         };
 
-        document.getElementById("output").value =
-            JSON.stringify(packageData, null, 4);
+        output.value = JSON.stringify(packageData, null, 4);
 
     } catch (err) {
-        alert("Failed to generate broadcast: " + err);
+        output.value = "ERROR: " + err.message;
     }
 }
 
 function stopBroadcast() {
 
-    const packageData = {
+    document.getElementById("output").value = JSON.stringify({
         active: false,
         generatedAt: new Date().toISOString()
-    };
-
-    document.getElementById("output").value =
-        JSON.stringify(packageData, null, 4);
+    }, null, 4);
 }
 
 </script>
+
 </body>
 </html>
