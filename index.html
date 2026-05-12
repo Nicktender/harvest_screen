@@ -130,7 +130,31 @@
 
 <script>
 
-function generateBroadcast() {
+function getVideoDuration(url) {
+    return new Promise((resolve, reject) => {
+
+        const video = document.createElement("video");
+
+        video.preload = "metadata";
+        video.src = url;
+
+        video.onloadedmetadata = () => {
+            window.URL.revokeObjectURL(video.src);
+
+            if (video.duration === Infinity || isNaN(video.duration)) {
+                reject("Invalid duration");
+            } else {
+                resolve(video.duration); // seconds
+            }
+        };
+
+        video.onerror = () => {
+            reject("Failed to load video metadata");
+        };
+    });
+}
+
+async function generateBroadcast() {
 
     const title =
         document.getElementById("title").value.trim();
@@ -144,7 +168,7 @@ function generateBroadcast() {
     let endLocal =
         document.getElementById("endTime").value;
 
-    const durationMinutes =
+    const durationMinutesInput =
         parseInt(document.getElementById("durationMinutes").value);
 
     if (!videoUrl || !startLocal) {
@@ -152,39 +176,46 @@ function generateBroadcast() {
         return;
     }
 
-    // Convert local start time into Date object
     const startDate = new Date(startLocal);
-
     let endDate;
 
-    // If no end time specified, auto-generate one
-    if (!endLocal) {
+    try {
 
-        endDate = new Date(startDate.getTime());
+        // If no end time → fetch real video duration
+        if (!endLocal) {
 
-        endDate.setMinutes(
-            endDate.getMinutes() + durationMinutes
-        );
+            let durationSeconds;
 
-    } else {
+            try {
+                durationSeconds = await getVideoDuration(videoUrl);
+            } catch (e) {
+                console.warn("Could not fetch video duration, fallback to input:", e);
+                durationSeconds = durationMinutesInput * 60;
+            }
 
-        endDate = new Date(endLocal);
+            endDate = new Date(startDate.getTime() + durationSeconds * 1000);
+
+        } else {
+            endDate = new Date(endLocal);
+        }
+
+        const packageData = {
+            active: true,
+            title: title || "Untitled Broadcast",
+            video: videoUrl,
+
+            startTime: startDate.toISOString(),
+            endTime: endDate.toISOString(),
+
+            generatedAt: new Date().toISOString()
+        };
+
+        document.getElementById("output").value =
+            JSON.stringify(packageData, null, 4);
+
+    } catch (err) {
+        alert("Failed to generate broadcast: " + err);
     }
-
-    const packageData = {
-        active: true,
-        title: title || "Untitled Broadcast",
-        video: videoUrl,
-
-        // UTC ISO timestamps
-        startTime: startDate.toISOString(),
-        endTime: endDate.toISOString(),
-
-        generatedAt: new Date().toISOString()
-    };
-
-    document.getElementById("output").value =
-        JSON.stringify(packageData, null, 4);
 }
 
 function stopBroadcast() {
@@ -199,6 +230,5 @@ function stopBroadcast() {
 }
 
 </script>
-
 </body>
 </html>
